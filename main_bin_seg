@@ -1,0 +1,173 @@
+#include <Wire.h>
+#include <SoftwareSerial.h>
+#include "MAX30100_PulseOximeter.h"
+#include <Adafruit_MLX90614.h>
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+//SoftwareSerial Serial1(12,13);
+
+#define REPORTING_PERIOD_MS     1000
+
+const int GSR=A1;
+int sensorValue=0;
+int gsr_average=0;
+
+int tempC;
+int tempF;
+int heartRate;
+int SpO2;
+
+long sum=0;
+int timer = 0;
+int i = 0;
+//int T;
+//int P;
+
+String Buffer; 
+PulseOximeter pox;
+uint32_t tsLastReport = 0;
+ 
+
+ //              1   2   3   4   5   6   7   8   9  10 
+byte ECG[51] = {40, 38, 42, 43, 44, 45, 44, 43 ,42, 41,
+               40, 40, 40, 40, 40, 39, 42, 43, 60, 80,
+               100,120,80, 50,  5, 10, 20, 30, 40, 50,
+               35, 40, 41, 42, 43, 44, 45, 46, 47, 48,
+               49, 50, 51, 51, 50, 49, 48, 45, 42, 40, 40}; // 50 PQRST wave datapoints
+
+byte y,t;                                   // Y axis, time
+int baseline = 20;
+
+///////////////////////////////////
+void onBeatDetected()
+{
+    Serial.println("Beat!");
+}
+///////////////////
+
+void setup() {
+pinMode(10, INPUT); // Setup for leads off detection LO +
+pinMode(11, INPUT); // Setup for leads off detection LO -
+Serial.begin(9600);
+
+//Serial1.begin(115200);
+Serial.print("Initializing pulse oximeter..");
+ 
+    // Initialize the PulseOximeter instance
+    // Failures are generally due to an improper I2C wiring, missing power supply
+    // or wrong target chip
+    if (!pox.begin()) {
+        Serial.println("FAILED");
+        for(;;);
+    } else {
+        Serial.println("SUCCESS");
+    }
+
+     
+     pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
+ 
+    // Register a callback for the beat detection
+    pox.setOnBeatDetectedCallback(onBeatDetected);
+     
+mlx.begin();
+
+//Wire.begin();
+}
+
+void loop(){
+
+    pox.update();
+     if (millis() - tsLastReport > REPORTING_PERIOD_MS) {
+       Serial.print("Heart rate:");
+        Serial.print(pox.getHeartRate());
+         Serial.print("bpm / SpO2:");
+        Serial.print(pox.getSpO2());
+        Serial.println("%");
+        tsLastReport = millis();
+     }
+        
+
+//if(Serial1.available() > 0)
+if(Serial.available()>0)
+  {
+    //switch(Serial1.read())
+   switch(Serial.read())
+    {
+      case 'a':
+      delay(10);
+      //Buffer = Serial1.readStringUntil('\n');
+      Buffer = Serial.readStringUntil('\n');
+      heartRate=Buffer.toInt();
+      break;
+
+      case 'b':
+      delay(10);
+      //Buffer = Serial1.readStringUntil('\n');
+      Buffer = Serial.readStringUntil('\n');
+      SpO2=Buffer.toInt();
+      break;
+    }
+    
+  }
+ // }
+
+
+if((digitalRead(10) == 1)||(digitalRead(11) == 1)){
+  //Serial.println('!');
+  Serial.write(0);
+ }
+  else{
+    Serial.println(analogRead(A0));
+  t = t+1;                               
+  if(t > 100){t=0;}
+  if(t<50){                                
+    for(int i=0; i<10; i++){                
+      y = ECG[t]+ random(-3,3) + baseline;            
+      y = y + i*((ECG[t+1] - ECG[t])/10);  
+      y = constrain(y,0,255);
+                     
+      Serial.write(y);                     
+    }
+  }
+  else{for(int i=0; i<10; i++){
+     // Serial.write(y);// send 10x fifty times
+   
+      y =  40 + random(-2,2) + baseline;     
+  //     y =  40 + random(-0,0) + baseline;           
+    }
+  }
+ } 
+
+ tempC = mlx.readAmbientTempC();
+ //delay(500);
+ tempF = mlx.readAmbientTempF();
+ heartRate = pox.getHeartRate();
+ SpO2 = pox.getSpO2();
+
+
+
+  long sum=0;
+  for(int i=0;i<10;i++)           //Average the 10 measurements to remove the glitch
+      {
+      sensorValue=analogRead(GSR);
+      sum += sensorValue;
+    //  delay(5);
+      }
+   gsr_average = sum/10;
+  
+if(timer == 0){Serial.print("AV ");Serial.println(tempC);}
+if(timer == 1){Serial.print("BV "); Serial.println(tempF);}
+if(timer == 2){Serial.print("CV "); Serial.println(heartRate);}
+if(timer == 3){Serial.print("DV "); Serial.println(SpO2);}
+if(timer == 4){Serial.print("EV "); Serial.println(y);}
+if(timer == 5){Serial.print("FV "); Serial.println(gsr_average);}
+
+
+timer = timer+1;
+if(timer>5){timer=0;}
+
+ // }
+//}
+  Serial.flush();
+ //delay(1000);
+ 
+}
